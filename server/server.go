@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 
 	"kiro2api/auth"
@@ -12,6 +13,7 @@ import (
 	"kiro2api/logger"
 	"kiro2api/types"
 	"kiro2api/utils"
+	"kiro2api/weblogin"
 
 	"github.com/gin-gonic/gin"
 )
@@ -37,6 +39,9 @@ func StartServer(port string, authToken string, authService *auth.AuthService) {
 	r.Use(corsMiddleware())
 	// 只对 /v1 开头的端点进行认证
 	r.Use(PathBasedAuthMiddleware(authToken, []string{"/v1"}))
+
+	// 初始化网页登录功能（如果启用）
+	initWebLogin(r, authService)
 
 	// 静态资源服务 - 前后端完全分离
 	r.Static("/static", "./static")
@@ -255,7 +260,7 @@ func StartServer(port string, authToken string, authService *auth.AuthService) {
 func corsMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")
-		c.Header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		c.Header("Access-Control-Allow-Methods", "GET, POST, OPTIONS, DELETE")
 		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization, x-api-key")
 
 		if c.Request.Method == "OPTIONS" {
@@ -265,4 +270,120 @@ func corsMiddleware() gin.HandlerFunc {
 
 		c.Next()
 	}
+}
+
+// initWebLogin 初始化网页登录功能
+func initWebLogin(r *gin.Engine, authService *auth.AuthService) {
+	// 检查是否启用网页登录
+	enableWebLogin := os.Getenv("ENABLE_WEB_LOGIN")
+	if enableWebLogin != "true" && enableWebLogin != "1" {
+		logger.Info("Web login disabled (set ENABLE_WEB_LOGIN=true to enable)")
+		return
+	}
+
+	// 获取配置
+	callbackPort := 8081
+	if portStr := os.Getenv("WEB_LOGIN_CALLBACK_PORT"); portStr != "" {
+		if port, err := strconv.Atoi(portStr); err == nil {
+			callbackPort = port
+		}
+	}
+
+	tokenDir := os.Getenv("WEB_LOGIN_TOKEN_DIR")
+	if tokenDir == "" {
+		tokenDir = "./tokens"
+	}
+
+	hostname := os.Getenv("WEB_LOGIN_HOSTNAME")
+	if hostname == "" {
+		hostname = "127.0.0.1"
+	}
+
+	logger.Info("Initializing web login",
+		"callbackPort", callbackPort,
+		"tokenDir", tokenDir,
+		"hostname", hostname)
+
+	// 创建 Token 管理器
+	tokenManager, err := weblogin.NewTokenManager(tokenDir)
+	if err != nil {
+		logger.Error("Failed to create token manager", "error", err)
+		return
+	}
+
+	// 创建 OAuth 回调服务器
+	oauthServer := weblogin.NewOAuthCallbackServer(callbackPort, hostname)
+	if err := oauthServer.Start(); err != nil {
+		logger.Error("Failed to start OAuth callback server", "error", err)
+		return
+	}
+
+	// 创建登录处理器
+	loginHandler := weblogin.NewLoginHandler(oauthServer, tokenManager)
+
+	// 注册登录路由
+	RegisterLoginRoutes(r, loginHandler)
+
+	// 注册登录页面路由
+	r.GET("/login", func(c *gin.Context) {
+		c.File("./web/login.html")
+	})
+
+	// 从 token 目录加载已保存的 token 并添加到 auth service
+	if err := loadSavedTokensToAuth(tokenManager, authService); err != nil {
+		logger.Warn("Failed to load saved tokens to auth service", "error", err)
+	}
+
+	logger.Info("Web login enabled")
+	logger.Info("  GET  /login                         - Web login control panel")
+	logger.Info("  POST /api/login/start               - Start login flow")
+	logger.Info("  GET  /api/login/wait/:sessionId     - Wait for login completion")
+	logger.Info("  POST /api/login/manual-callback     - Manual callback submission")
+	logger.Info("  GET  /api/login/tokens              - List saved tokens")
+	logger.Info("  POST /api/login/tokens/:filename/refresh - Refresh token")
+	logger.Info("  DELETE /api/login/tokens/:filename  - Delete token")
+}
+
+// loadSavedTokensToAuth 加载已保存的 token 到 auth service
+func loadSavedTokensToAuth(tokenManager *weblogin.TokenManager, authService *auth.AuthService) error {
+	tokens, err := tokenManager.LoadAllTokens()
+	if err != nil {
+		return fmt.Errorf("failed to load tokens: %w", err)
+	}
+
+	count := 0
+	for _, tokenData := range tokens {
+		// 转换为 auth.TokenInfo
+		tokenInfo := &auth.TokenInfo{
+			Auth:         string(tokenData.AuthMethod),
+			RefreshToken: tokenData.RefreshToken,
+		}
+
+		// 根据 AuthMethod 设置额外字段
+		if tokenData.AuthMethod == weblogin.AuthMethodIdC {
+			tokenInfo.ClientID = tokenData.ClientID
+			tokenInfo.ClientSecret = tokenData.ClientSecret
+		}
+
+		// 添加到 auth service
+		if err := authService.AddToken(tokenInfo); err != nil {
+			logger.Warn("Failed to add token to auth service",
+				"provider", tokenData.Provider,
+				"accountName", tokenData.AccountName,
+				"error", err)
+			continue
+		}
+
+		count++
+		logger.Debug("Loaded saved token to auth service",
+			"provider", tokenData.Provider,
+			"authMethod", tokenData.AuthMethod,
+			"accountName", tokenData.AccountName)
+	}
+
+	if count > 0 {
+		logger.Info("Loaded saved tokens to auth service", "count", count)
+	}
+
+	return nil
 }

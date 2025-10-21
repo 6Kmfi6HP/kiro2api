@@ -20,6 +20,10 @@ temp/
 # 测试数据
 test/raw_data_replay/
 
+# Web Login Token 文件（敏感信息）
+tokens/*.json
+tokens/
+
 # IDE 和系统文件
 .DS_Store
 .serena

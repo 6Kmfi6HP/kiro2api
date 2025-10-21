@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kiro2API - Web Login</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 2rem;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .card {
+            background: white;
+            border-radius: 1rem;
+            padding: 2rem;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            margin-bottom: 2rem;
+        }
+
+        .card h2 {
+            color: #2d3748;
+            margin-bottom: 1.5rem;
+            font-size: 1.5rem;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group label {
+            display: block;
+            color: #4a5568;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        .form-group select,
+        .form-group input {
+            width: 100%;
+            padding: 0.75rem;
+            border: 2px solid #e2e8f0;
+            border-radius: 0.5rem;
+            font-size: 1rem;
+            transition: border-color 0.3s;
+        }
+
+        .form-group select:focus,
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 0.75rem 2rem;
+            border: none;
+            border-radius: 0.5rem;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn-small {
+            padding: 0.5rem 1rem;
+            font-size: 0.9rem;
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #56ab2f 0%, #a8e063 100%);
+        }
+
+        .auth-url-box {
+            background: #f7fafc;
+            border: 2px dashed #cbd5e0;
+            border-radius: 0.5rem;
+            padding: 1.5rem;
+            margin-top: 1rem;
+            display: none;
+        }
+
+        .auth-url-box.active {
+            display: block;
+        }
+
+        .auth-url {
+            word-break: break-all;
+            color: #4a5568;
+            margin-bottom: 1rem;
+            font-family: monospace;
+            font-size: 0.9rem;
+        }
+
+        .manual-callback-box {
+            background: #fffbeb;
+            border: 2px solid #fbbf24;
+            border-radius: 0.5rem;
+            padding: 1.5rem;
+            margin-top: 1rem;
+            display: none;
+        }
+
+        .manual-callback-box.active {
+            display: block;
+        }
+
+        .token-list {
+            margin-top: 1rem;
+        }
+
+        .token-item {
+            background: #f7fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .token-item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .token-item-title {
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        .token-item-status {
+            padding: 0.25rem 0.75rem;
+            border-radius: 0.25rem;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .status-valid {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+
+        .status-expiring {
+            background: #fefcbf;
+            color: #744210;
+        }
+
+        .status-expired {
+            background: #fed7d7;
+            color: #742a2a;
+        }
+
+        .token-item-info {
+            color: #718096;
+            font-size: 0.9rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .token-item-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            color: #718096;
+        }
+
+        .message {
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .message-success {
+            background: #c6f6d5;
+            color: #22543d;
+            border: 1px solid #9ae6b4;
+        }
+
+        .message-error {
+            background: #fed7d7;
+            color: #742a2a;
+            border: 1px solid #fc8181;
+        }
+
+        .message-info {
+            background: #bee3f8;
+            color: #2c5282;
+            border: 1px solid #90cdf4;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Kiro2API Web Login</h1>
+            <p>Web-based login for Kiro accounts with persistent token storage</p>
+        </div>
+
+        <!-- Login Card -->
+        <div class="card">
+            <h2>🔐 Start New Login</h2>
+            <div id="loginMessage"></div>
+
+            <div class="form-group">
+                <label for="provider">Provider</label>
+                <select id="provider">
+                    <option value="Google">Google (Social Authentication)</option>
+                    <option value="Github">GitHub (Social Authentication)</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="accountName">Account Name (Optional)</label>
+                <input type="text" id="accountName" placeholder="e.g., my-account">
+            </div>
+
+            <button class="btn" onclick="startLogin()">Start Login</button>
+
+            <div id="authUrlBox" class="auth-url-box">
+                <h3 style="margin-bottom: 1rem; color: #2d3748;">Authorization URL</h3>
+                <div class="auth-url" id="authUrl"></div>
+                <button class="btn btn-small" onclick="copyAuthUrl()">Copy URL</button>
+                <button class="btn btn-small btn-success" onclick="openAuthUrl()">Open in Browser</button>
+            </div>
+
+            <div id="manualCallbackBox" class="manual-callback-box">
+                <h3 style="margin-bottom: 1rem; color: #92400e;">Remote Deployment Mode</h3>
+                <p style="margin-bottom: 1rem; color: #78350f;">If kiro2api is not running on localhost, please copy the callback URL from your browser and paste it below:</p>
+                <div class="form-group">
+                    <label for="callbackUrl">Callback URL</label>
+                    <input type="text" id="callbackUrl" placeholder="http://127.0.0.1:8081/oauth/callback?code=...&state=...">
+                </div>
+                <button class="btn btn-small" onclick="submitManualCallback()">Submit Callback</button>
+            </div>
+        </div>
+
+        <!-- Token List Card -->
+        <div class="card">
+            <h2>📋 Saved Tokens</h2>
+            <button class="btn btn-small" onclick="loadTokens()">Refresh List</button>
+            <div id="tokenList" class="token-list">
+                <div class="loading">Loading tokens...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentSessionId = null;
+        let currentAuthUrl = null;
+        let currentRedirectUri = null;
+        let isLocalhost = true;
+
+        // 启动登录
+        async function startLogin() {
+            const provider = document.getElementById('provider').value;
+            const accountName = document.getElementById('accountName').value;
+
+            showMessage('loginMessage', 'Starting login flow...', 'info');
+
+            try {
+                const response = await fetch('/api/login/start', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        provider: provider,
+                        accountName: accountName || undefined
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.details || data.error || 'Failed to start login');
+                }
+
+                currentSessionId = data.sessionId;
+                currentAuthUrl = data.authUrl;
+                currentRedirectUri = data.redirectUri;
+                isLocalhost = data.isLocalhost;
+
+                // 显示授权 URL
+                document.getElementById('authUrl').textContent = currentAuthUrl;
+                document.getElementById('authUrlBox').classList.add('active');
+
+                // 如果不是 localhost，显示手动回调框
+                if (!isLocalhost) {
+                    document.getElementById('manualCallbackBox').classList.add('active');
+                } else {
+                    // 自动打开浏览器
+                    openAuthUrl();
+                    // 等待登录完成
+                    waitForLogin();
+                }
+
+                showMessage('loginMessage', data.message, 'success');
+            } catch (error) {
+                showMessage('loginMessage', 'Error: ' + error.message, 'error');
+            }
+        }
+
+        // 等待登录完成
+        async function waitForLogin() {
+            if (!currentSessionId) return;
+
+            showMessage('loginMessage', 'Waiting for login completion...', 'info');
+
+            try {
+                const response = await fetch(`/api/login/wait/${currentSessionId}`);
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.details || data.error || 'Login failed or timeout');
+                }
+
+                showMessage('loginMessage', 'Login successful! Token saved.', 'success');
+
+                // 清理
+                currentSessionId = null;
+                currentAuthUrl = null;
+                currentRedirectUri = null;
+                document.getElementById('authUrlBox').classList.remove('active');
+                document.getElementById('accountName').value = '';
+
+                // 刷新 token 列表
+                loadTokens();
+            } catch (error) {
+                showMessage('loginMessage', 'Error: ' + error.message, 'error');
+            }
+        }
+
+        // 复制授权 URL
+        function copyAuthUrl() {
+            if (!currentAuthUrl) return;
+
+            navigator.clipboard.writeText(currentAuthUrl).then(() => {
+                showMessage('loginMessage', 'Authorization URL copied to clipboard!', 'success');
+            }).catch(() => {
+                showMessage('loginMessage', 'Failed to copy URL', 'error');
+            });
+        }
+
+        // 打开授权 URL
+        function openAuthUrl() {
+            if (!currentAuthUrl) return;
+            window.open(currentAuthUrl, '_blank');
+        }
+
+        // 提交手动回调
+        async function submitManualCallback() {
+            const callbackUrl = document.getElementById('callbackUrl').value;
+
+            if (!callbackUrl) {
+                showMessage('loginMessage', 'Please enter the callback URL', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/login/manual-callback', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        sessionId: currentSessionId,
+                        callbackUrl: callbackUrl
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.details || data.error || 'Failed to process callback');
+                }
+
+                showMessage('loginMessage', 'Login successful! Token saved.', 'success');
+
+                // 清理
+                currentSessionId = null;
+                currentAuthUrl = null;
+                currentRedirectUri = null;
+                document.getElementById('authUrlBox').classList.remove('active');
+                document.getElementById('manualCallbackBox').classList.remove('active');
+                document.getElementById('accountName').value = '';
+                document.getElementById('callbackUrl').value = '';
+
+                // 刷新 token 列表
+                loadTokens();
+            } catch (error) {
+                showMessage('loginMessage', 'Error: ' + error.message, 'error');
+            }
+        }
+
+        // 加载 token 列表
+        async function loadTokens() {
+            const tokenList = document.getElementById('tokenList');
+            tokenList.innerHTML = '<div class="loading">Loading tokens...</div>';
+
+            try {
+                const response = await fetch('/api/login/tokens');
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.details || data.error || 'Failed to load tokens');
+                }
+
+                if (data.tokens.length === 0) {
+                    tokenList.innerHTML = '<p style="text-align: center; color: #718096; padding: 2rem;">No tokens found. Please login to create a token.</p>';
+                    return;
+                }
+
+                tokenList.innerHTML = data.tokens.map(token => {
+                    const statusClass = token.status === 'valid' ? 'status-valid' :
+                                      token.status === 'expiring' ? 'status-expiring' :
+                                      'status-expired';
+
+                    return `
+                        <div class="token-item">
+                            <div class="token-item-header">
+                                <span class="token-item-title">${token.filename}</span>
+                                <span class="token-item-status ${statusClass}">${token.status}</span>
+                            </div>
+                            <div class="token-item-info">
+                                <div>Provider: ${token.provider} | Auth: ${token.authMethod}</div>
+                                <div>Account: ${token.accountName || 'N/A'}</div>
+                                <div>Created: ${new Date(token.createdAt).toLocaleString()}</div>
+                                <div>Expires: ${new Date(token.expiresAt).toLocaleString()}</div>
+                            </div>
+                            <div class="token-item-actions">
+                                <button class="btn btn-small btn-success" onclick="refreshToken('${token.filename}')">Refresh</button>
+                                <button class="btn btn-small btn-danger" onclick="deleteToken('${token.filename}')">Delete</button>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            } catch (error) {
+                tokenList.innerHTML = `<p style="text-align: center; color: #e53e3e; padding: 2rem;">Error: ${error.message}</p>`;
+            }
+        }
+
+        // 刷新 token
+        async function refreshToken(filename) {
+            if (!confirm(`Are you sure you want to refresh token: ${filename}?`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/login/tokens/${filename}/refresh`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.details || data.error || 'Failed to refresh token');
+                }
+
+                alert('Token refreshed successfully!');
+                loadTokens();
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+
+        // 删除 token
+        async function deleteToken(filename) {
+            if (!confirm(`Are you sure you want to delete token: ${filename}?`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/login/tokens/${filename}`, {
+                    method: 'DELETE'
+                });
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.details || data.error || 'Failed to delete token');
+                }
+
+                alert('Token deleted successfully!');
+                loadTokens();
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+
+        // 显示消息
+        function showMessage(elementId, message, type) {
+            const element = document.getElementById(elementId);
+            const className = `message message-${type}`;
+            element.innerHTML = `<div class="${className}">${message}</div>`;
+        }
+
+        // 页面加载时加载 token 列表
+        document.addEventListener('DOMContentLoaded', () => {
+            loadTokens();
+        });
+    </script>
+</body>
+</html>
