@@ -51,7 +51,7 @@ func (tm *TokenManager) SaveToken(tokenData *TokenData) (string, error) {
 		return "", fmt.Errorf("failed to write token file: %w", err)
 	}
 
-	logger.Info("Token saved", "filename", filename, "provider", tokenData.Provider, "authMethod", tokenData.AuthMethod)
+	logger.Info("Token saved", logger.String("filename", filename), logger.String("provider", string(tokenData.Provider)), logger.String("authMethod", string(tokenData.AuthMethod)))
 	return filename, nil
 }
 
@@ -87,7 +87,7 @@ func (tm *TokenManager) ListTokens() ([]*TokenListItem, error) {
 
 		tokenData, err := tm.LoadToken(entry.Name())
 		if err != nil {
-			logger.Warn("Failed to load token", "filename", entry.Name(), "error", err)
+			logger.Warn("Failed to load token", logger.String("filename", entry.Name()), logger.Err(err))
 			continue
 		}
 
@@ -120,7 +120,7 @@ func (tm *TokenManager) DeleteToken(filename string) error {
 		return fmt.Errorf("failed to delete token file: %w", err)
 	}
 
-	logger.Info("Token deleted", "filename", filename)
+	logger.Info("Token deleted", logger.String("filename", filename))
 	return nil
 }
 
@@ -139,13 +139,13 @@ func (tm *TokenManager) LoadAllTokens() ([]*TokenData, error) {
 
 		tokenData, err := tm.LoadToken(entry.Name())
 		if err != nil {
-			logger.Warn("Failed to load token", "filename", entry.Name(), "error", err)
+			logger.Warn("Failed to load token", logger.String("filename", entry.Name()), logger.Err(err))
 			continue
 		}
 
 		// 跳过已过期的 token
 		if time.Now().After(tokenData.ExpiresAt) {
-			logger.Debug("Skipping expired token", "filename", entry.Name())
+			logger.Debug("Skipping expired token", logger.String("filename", entry.Name()))
 			continue
 		}
 

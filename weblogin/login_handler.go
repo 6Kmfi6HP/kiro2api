@@ -78,7 +78,7 @@ func (h *LoginHandler) StartLogin(req *LoginRequest) (*LoginResponse, error) {
 	// 生成授权 URL
 	authURL := h.authClient.GetLoginURL(req.Provider, redirectURI, codeChallenge, state)
 
-	logger.Info("Login session started", "sessionId", sessionID, "provider", req.Provider)
+	logger.Info("Login session started", logger.String("sessionId", sessionID), logger.String("provider", string(req.Provider)))
 
 	return &LoginResponse{
 		SessionID:    sessionID,
@@ -107,21 +107,21 @@ func (h *LoginHandler) WaitForLogin(sessionID string, timeout time.Duration) (*T
 		// 保存 token
 		filename, err := h.tokenManager.SaveToken(tokenData)
 		if err != nil {
-			logger.Error("Failed to save token", "sessionId", sessionID, "error", err)
+			logger.Error("Failed to save token", logger.String("sessionId", sessionID), logger.Err(err))
 			return nil, fmt.Errorf("failed to save token: %w", err)
 		}
 
-		logger.Info("Login completed successfully", "sessionId", sessionID, "filename", filename)
+		logger.Info("Login completed successfully", logger.String("sessionId", sessionID), logger.String("filename", filename))
 		h.sessions.Delete(sessionID)
 		return tokenData, nil
 
 	case err := <-session.ErrorChan:
-		logger.Error("Login failed", "sessionId", sessionID, "error", err)
+		logger.Error("Login failed", logger.String("sessionId", sessionID), logger.Err(err))
 		h.sessions.Delete(sessionID)
 		return nil, err
 
 	case <-timer.C:
-		logger.Error("Login timeout", "sessionId", sessionID)
+		logger.Error("Login timeout", logger.String("sessionId", sessionID))
 		h.sessions.Delete(sessionID)
 		h.oauthServer.UnregisterSession(session.State)
 		return nil, fmt.Errorf("login timeout")
@@ -152,12 +152,12 @@ func (h *LoginHandler) HandleManualCallback(req *ManualCallbackRequest) (*TokenD
 		return nil, fmt.Errorf("invalid state parameter")
 	}
 
-	logger.Debug("Processing manual callback", "sessionId", req.SessionID, "code", code[:20]+"...")
+	logger.Debug("Processing manual callback", logger.String("sessionId", req.SessionID), logger.String("code", code[:20]+"..."))
 
 	// 交换授权码
 	tokenResp, err := h.authClient.CreateToken(code, session.CodeVerifier, session.RedirectURI)
 	if err != nil {
-		logger.Error("Failed to exchange token", "sessionId", req.SessionID, "error", err)
+		logger.Error("Failed to exchange token", logger.String("sessionId", req.SessionID), logger.Err(err))
 		return nil, fmt.Errorf("failed to exchange token: %w", err)
 	}
 
@@ -179,11 +179,11 @@ func (h *LoginHandler) HandleManualCallback(req *ManualCallbackRequest) (*TokenD
 	// 保存 token
 	filename, err := h.tokenManager.SaveToken(tokenData)
 	if err != nil {
-		logger.Error("Failed to save token", "sessionId", req.SessionID, "error", err)
+		logger.Error("Failed to save token", logger.String("sessionId", req.SessionID), logger.Err(err))
 		return nil, fmt.Errorf("failed to save token: %w", err)
 	}
 
-	logger.Info("Manual callback processed successfully", "sessionId", req.SessionID, "filename", filename)
+	logger.Info("Manual callback processed successfully", logger.String("sessionId", req.SessionID), logger.String("filename", filename))
 
 	// 清理会话
 	h.sessions.Delete(req.SessionID)
@@ -230,7 +230,7 @@ func (h *LoginHandler) RefreshToken(filename string) (*TokenData, error) {
 		return nil, fmt.Errorf("failed to save refreshed token: %w", err)
 	}
 
-	logger.Info("Token refreshed successfully", "filename", filename)
+	logger.Info("Token refreshed successfully", logger.String("filename", filename))
 	return oldToken, nil
 }
 

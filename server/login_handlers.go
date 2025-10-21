@@ -34,11 +34,11 @@ func (h *LoginHandlers) StartLogin(c *gin.Context) {
 		return
 	}
 
-	logger.Info("Starting login flow", "provider", req.Provider, "accountName", req.AccountName)
+	logger.Info("Starting login flow", logger.String("provider", string(req.Provider)), logger.String("accountName", req.AccountName))
 
 	resp, err := h.loginHandler.StartLogin(&req)
 	if err != nil {
-		logger.Error("Failed to start login", "error", err)
+		logger.Error("Failed to start login", logger.Err(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Failed to start login",
 			"details": err.Error(),
@@ -60,12 +60,12 @@ func (h *LoginHandlers) WaitForLogin(c *gin.Context) {
 		return
 	}
 
-	logger.Debug("Waiting for login completion", "sessionId", sessionID)
+	logger.Debug("Waiting for login completion", logger.String("sessionId", sessionID))
 
 	// 设置 5 分钟超时
 	tokenData, err := h.loginHandler.WaitForLogin(sessionID, 5*time.Minute)
 	if err != nil {
-		logger.Error("Login failed", "sessionId", sessionID, "error", err)
+		logger.Error("Login failed", logger.String("sessionId", sessionID), logger.Err(err))
 		c.JSON(http.StatusRequestTimeout, gin.H{
 			"error": "Login failed or timeout",
 			"details": err.Error(),
@@ -97,11 +97,11 @@ func (h *LoginHandlers) HandleManualCallback(c *gin.Context) {
 		return
 	}
 
-	logger.Info("Processing manual callback", "sessionId", req.SessionID)
+	logger.Info("Processing manual callback", logger.String("sessionId", req.SessionID))
 
 	tokenData, err := h.loginHandler.HandleManualCallback(&req)
 	if err != nil {
-		logger.Error("Failed to process manual callback", "sessionId", req.SessionID, "error", err)
+		logger.Error("Failed to process manual callback", logger.String("sessionId", req.SessionID), logger.Err(err))
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "Failed to process callback",
 			"details": err.Error(),
@@ -126,7 +126,7 @@ func (h *LoginHandlers) HandleManualCallback(c *gin.Context) {
 func (h *LoginHandlers) ListTokens(c *gin.Context) {
 	tokens, err := h.loginHandler.ListTokens()
 	if err != nil {
-		logger.Error("Failed to list tokens", "error", err)
+		logger.Error("Failed to list tokens", logger.Err(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Failed to list tokens",
 			"details": err.Error(),
@@ -151,11 +151,11 @@ func (h *LoginHandlers) RefreshToken(c *gin.Context) {
 		return
 	}
 
-	logger.Info("Refreshing token", "filename", filename)
+	logger.Info("Refreshing token", logger.String("filename", filename))
 
 	tokenData, err := h.loginHandler.RefreshToken(filename)
 	if err != nil {
-		logger.Error("Failed to refresh token", "filename", filename, "error", err)
+		logger.Error("Failed to refresh token", logger.String("filename", filename), logger.Err(err))
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "Failed to refresh token",
 			"details": err.Error(),
@@ -186,10 +186,10 @@ func (h *LoginHandlers) DeleteToken(c *gin.Context) {
 		return
 	}
 
-	logger.Info("Deleting token", "filename", filename)
+	logger.Info("Deleting token", logger.String("filename", filename))
 
 	if err := h.loginHandler.DeleteToken(filename); err != nil {
-		logger.Error("Failed to delete token", "filename", filename, "error", err)
+		logger.Error("Failed to delete token", logger.String("filename", filename), logger.Err(err))
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "Failed to delete token",
 			"details": err.Error(),

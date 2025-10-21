@@ -52,16 +52,16 @@ func (s *OAuthCallbackServer) Start() error {
 	}
 
 	go func() {
-		logger.Info("OAuth callback server starting", "addr", s.server.Addr)
+		logger.Info("OAuth callback server starting", logger.String("addr", s.server.Addr))
 		if err := s.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			logger.Error("OAuth callback server error", "error", err)
+			logger.Error("OAuth callback server error", logger.Err(err))
 		}
 	}()
 
 	// 等待一小段时间确保服务器启动
 	time.Sleep(100 * time.Millisecond)
 
-	logger.Info("OAuth callback server started", "addr", s.server.Addr)
+	logger.Info("OAuth callback server started", logger.String("addr", s.server.Addr))
 	return nil
 }
 
@@ -94,18 +94,18 @@ func (s *OAuthCallbackServer) GetRedirectURI() string {
 // RegisterSession 注册登录会话
 func (s *OAuthCallbackServer) RegisterSession(session *LoginSession) {
 	s.sessions.Store(session.State, session)
-	logger.Debug("Registered login session", "sessionId", session.SessionID, "state", session.State)
+	logger.Debug("Registered login session", logger.String("sessionId", session.SessionID), logger.String("state", session.State))
 }
 
 // UnregisterSession 取消注册登录会话
 func (s *OAuthCallbackServer) UnregisterSession(state string) {
 	s.sessions.Delete(state)
-	logger.Debug("Unregistered login session", "state", state)
+	logger.Debug("Unregistered login session", logger.String("state", state))
 }
 
 // handleCallback 处理 OAuth 回调
 func (s *OAuthCallbackServer) handleCallback(w http.ResponseWriter, r *http.Request) {
-	logger.Info("Received OAuth callback", "method", r.Method, "url", r.URL.String())
+	logger.Info("Received OAuth callback", logger.String("method", r.Method), logger.String("url", r.URL.String()))
 
 	// 解析查询参数
 	query := r.URL.Query()
@@ -117,7 +117,7 @@ func (s *OAuthCallbackServer) handleCallback(w http.ResponseWriter, r *http.Requ
 			errDesc = "Unknown error"
 		}
 
-		logger.Error("OAuth callback error", "error", errCode, "description", errDesc)
+		logger.Error("OAuth callback error", logger.String("error", errCode), logger.String("description", errDesc))
 		s.sendErrorResponse(w, errCode, errDesc)
 
 		// 通知会话
@@ -144,12 +144,12 @@ func (s *OAuthCallbackServer) handleCallback(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	logger.Info("OAuth callback success", "code", code[:20]+"...", "state", state)
+	logger.Info("OAuth callback success", logger.String("code", code[:20]+"..."), logger.String("state", state))
 
 	// 查找会话
 	sessionVal, ok := s.sessions.Load(state)
 	if !ok {
-		logger.Error("Session not found", "state", state)
+		logger.Error("Session not found", logger.String("state", state))
 		s.sendErrorResponse(w, "invalid_state", "Session not found or expired")
 		return
 	}
@@ -167,7 +167,7 @@ func (s *OAuthCallbackServer) handleCallback(w http.ResponseWriter, r *http.Requ
 func (s *OAuthCallbackServer) handleTokenExchange(session *LoginSession, code string) {
 	defer s.UnregisterSession(session.State)
 
-	logger.Debug("Exchanging authorization code for token", "sessionId", session.SessionID)
+	logger.Debug("Exchanging authorization code for token", logger.String("sessionId", session.SessionID))
 
 	// 创建 Kiro Auth 客户端
 	authClient := NewKiroAuthClient()
@@ -175,7 +175,7 @@ func (s *OAuthCallbackServer) handleTokenExchange(session *LoginSession, code st
 	// 交换授权码
 	tokenResp, err := authClient.CreateToken(code, session.CodeVerifier, session.RedirectURI)
 	if err != nil {
-		logger.Error("Failed to exchange token", "sessionId", session.SessionID, "error", err)
+		logger.Error("Failed to exchange token", logger.String("sessionId", session.SessionID), logger.Err(err))
 		select {
 		case session.ErrorChan <- err:
 		default:
@@ -198,7 +198,7 @@ func (s *OAuthCallbackServer) handleTokenExchange(session *LoginSession, code st
 		CreatedAt:    time.Now(),
 	}
 
-	logger.Info("Token exchange successful", "sessionId", session.SessionID, "profileArn", tokenResp.ProfileArn)
+	logger.Info("Token exchange successful", logger.String("sessionId", session.SessionID), logger.String("profileArn", tokenResp.ProfileArn))
 
 	// 发送结果
 	select {

@@ -300,21 +300,21 @@ func initWebLogin(r *gin.Engine, authService *auth.AuthService) {
 	}
 
 	logger.Info("Initializing web login",
-		"callbackPort", callbackPort,
-		"tokenDir", tokenDir,
-		"hostname", hostname)
+		logger.Int("callbackPort", callbackPort),
+		logger.String("tokenDir", tokenDir),
+		logger.String("hostname", hostname))
 
 	// 创建 Token 管理器
 	tokenManager, err := weblogin.NewTokenManager(tokenDir)
 	if err != nil {
-		logger.Error("Failed to create token manager", "error", err)
+		logger.Error("Failed to create token manager", logger.Err(err))
 		return
 	}
 
 	// 创建 OAuth 回调服务器
 	oauthServer := weblogin.NewOAuthCallbackServer(callbackPort, hostname)
 	if err := oauthServer.Start(); err != nil {
-		logger.Error("Failed to start OAuth callback server", "error", err)
+		logger.Error("Failed to start OAuth callback server", logger.Err(err))
 		return
 	}
 
@@ -331,7 +331,7 @@ func initWebLogin(r *gin.Engine, authService *auth.AuthService) {
 
 	// 从 token 目录加载已保存的 token 并添加到 auth service
 	if err := loadSavedTokensToAuth(tokenManager, authService); err != nil {
-		logger.Warn("Failed to load saved tokens to auth service", "error", err)
+		logger.Warn("Failed to load saved tokens to auth service", logger.Err(err))
 	}
 
 	logger.Info("Web login enabled")
@@ -368,21 +368,21 @@ func loadSavedTokensToAuth(tokenManager *weblogin.TokenManager, authService *aut
 		// 添加到 auth service
 		if err := authService.AddToken(tokenInfo); err != nil {
 			logger.Warn("Failed to add token to auth service",
-				"provider", tokenData.Provider,
-				"accountName", tokenData.AccountName,
-				"error", err)
+				logger.String("provider", string(tokenData.Provider)),
+				logger.String("accountName", tokenData.AccountName),
+				logger.Err(err))
 			continue
 		}
 
 		count++
 		logger.Debug("Loaded saved token to auth service",
-			"provider", tokenData.Provider,
-			"authMethod", tokenData.AuthMethod,
-			"accountName", tokenData.AccountName)
+			logger.String("provider", string(tokenData.Provider)),
+			logger.String("authMethod", string(tokenData.AuthMethod)),
+			logger.String("accountName", tokenData.AccountName))
 	}
 
 	if count > 0 {
-		logger.Info("Loaded saved tokens to auth service", "count", count)
+		logger.Info("Loaded saved tokens to auth service", logger.Int("count", count))
 	}
 
 	return nil

@@ -97,7 +97,7 @@ func (c *KiroAuthClient) CreateToken(code, codeVerifier, redirectURI string) (*C
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("User-Agent", "kiro2api/1.0.0")
 
-	logger.Debug("Creating token", "url", url)
+	logger.Debug("Creating token", logger.String("url", url))
 
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
@@ -142,7 +142,7 @@ func (c *KiroAuthClient) RefreshToken(refreshToken string) (*RefreshTokenRespons
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("User-Agent", "kiro2api/1.0.0")
 
-	logger.Debug("Refreshing token", "url", url)
+	logger.Debug("Refreshing token", logger.String("url", url))
 
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
