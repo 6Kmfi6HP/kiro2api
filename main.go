@@ -34,6 +34,10 @@ func main() {
 		os.Exit(1)
 	}
 
+	// ✅ 服务可以在没有token的情况下启动（用于dashboard管理）
+	// 用户可以通过 /dashboard 登录并保存token
+	// API请求将在没有可用token时返回错误
+
 	port := "8080" // 默认端口
 	if len(os.Args) > 1 {
 		port = os.Args[1]
@@ -52,5 +56,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	server.StartServer(port, clientToken, authService)
+	// 获取tokens目录路径（确保dashboard和auth使用相同的目录）
+	tokensDir := os.Getenv("KIRO_TOKENS_DIR")
+	if tokensDir == "" {
+		tokensDir = "tokens"
+	}
+
+	server.StartServer(port, clientToken, authService, tokensDir)
 }

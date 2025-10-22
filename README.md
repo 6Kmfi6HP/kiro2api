@@ -195,6 +195,103 @@ curl -X POST http://localhost:8080/v1/messages \
   -d '{"model": "claude-sonnet-4-20250514", "max_tokens": 100, "messages": [{"role": "user", "content": "你好"}]}'
 ```
 
+## Web Dashboard
+
+kiro2api 提供了一个现代化的 Web Dashboard，让您可以通过浏览器轻松管理 Kiro 认证 Token，无需手动编辑配置文件。
+
+### Dashboard 特性
+
+- **浏览器 OAuth 登录** - 直接在浏览器中完成 AWS SSO 认证流程
+- **多提供商支持** - 支持 BuilderId、Enterprise、Google、GitHub 等多种认证提供商
+- **Token 管理** - 查看、刷新、删除 Token，实时监控 Token 状态
+- **远程部署支持** - 支持手动回调模式，适用于远程服务器部署场景
+- **持久化存储** - Token 自动保存到 `tokens/` 目录，服务重启后自动加载
+- **零配置启动** - 无需预先配置 `KIRO_AUTH_TOKEN`，服务可直接启动
+
+### 使用方法
+
+#### 1. 启动服务
+
+```bash
+# 无需配置 KIRO_AUTH_TOKEN，直接启动
+./kiro2api
+
+# 或使用 Docker
+docker run -d -p 8080:8080 \
+  -v $(pwd)/tokens:/app/tokens \
+  -e KIRO_CLIENT_TOKEN=123456 \
+  ghcr.io/caidaoli/kiro2api:latest
+```
+
+#### 2. 访问 Dashboard
+
+在浏览器中打开：`http://localhost:8080/dashboard`
+
+#### 3. 添加账号
+
+1. 点击 "Add Account" 按钮
+2. 选择认证提供商（BuilderId、Google、GitHub 等）
+3. 点击 "Login" 开始 OAuth 流程
+4. 在弹出的浏览器窗口中完成认证
+5. 认证成功后，Token 自动保存到 `tokens/` 目录
+
+#### 4. 管理 Token
+
+- **查看状态** - Dashboard 显示所有 Token 的状态（valid/expiring/expired）
+- **刷新 Token** - 点击 "Refresh" 按钮刷新即将过期的 Token
+- **删除 Token** - 点击 "Delete" 按钮删除不需要的 Token
+
+### 远程部署
+
+当 kiro2api 部署在远程服务器时，OAuth 回调无法直接到达 `127.0.0.1`。此时可以使用手动回调模式：
+
+1. 在 Dashboard 中点击 "Add Account"
+2. 选择提供商并点击 "Login"
+3. 在浏览器中完成认证后，**不要关闭浏览器**
+4. 复制浏览器地址栏中的完整回调 URL（包含 `code` 和 `state` 参数）
+5. 返回 Dashboard，点击 "Manual Callback"
+6. 粘贴回调 URL 并提交
+7. Token 保存成功
+
+详细说明请参考：[远程部署指南](./doc/remote-deployment.md)
+
+### 环境变量
+
+```bash
+# Token 存储目录（可选，默认：./tokens）
+KIRO_TOKENS_DIR=/path/to/tokens
+
+# 传统配置方式（仍然支持，向后兼容）
+KIRO_AUTH_TOKEN='[{"auth":"Social","refreshToken":"xxx"}]'
+```
+
+**Token 加载优先级**：
+1. 环境变量 `KIRO_AUTH_TOKEN`（如果设置）
+2. Token 文件目录 `KIRO_TOKENS_DIR`（默认 `./tokens`）
+
+### 截图
+
+**Dashboard 主页**
+- 显示所有已保存的 Token
+- 实时状态监控（valid/expiring/expired）
+- 一键刷新和删除操作
+
+**OAuth 登录流程**
+- 选择认证提供商
+- 自动打开浏览器完成认证
+- 无缝回调处理
+
+**手动回调模式**
+- 适用于远程部署场景
+- 复制粘贴回调 URL
+- 安全可靠的 Token 保存
+
+### 更多文档
+
+- [Dashboard 使用指南](./doc/dashboard-guide.md) - 详细的功能说明和操作步骤
+- [远程部署指南](./doc/remote-deployment.md) - 远程服务器部署和手动回调配置
+- [故障排除](./doc/troubleshooting.md) - 常见问题和解决方案
+
 ### Docker 部署
 
 #### 快速开始

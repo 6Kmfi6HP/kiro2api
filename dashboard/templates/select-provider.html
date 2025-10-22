@@ -1,0 +1,141 @@
+{{template "base" .}}
+
+{{define "title"}}Select Provider - Kiro2API{{end}}
+
+{{define "content"}}
+<div class="provider-selection">
+  <div class="page-header">
+    <a href="/dashboard" class="back-link">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M19 12H5M12 19l-7-7 7-7"/>
+      </svg>
+      Back to Dashboard
+    </a>
+    <h2>Select Authentication Provider</h2>
+    <p class="subtitle">Choose how you want to authenticate with AWS services</p>
+  </div>
+
+  <div class="provider-grid">
+    <!-- Social Providers -->
+    <div class="provider-card" onclick="selectProvider('Google')">
+      <div class="provider-card-icon">🔵</div>
+      <h3>Google</h3>
+      <p class="provider-type">Social Authentication</p>
+      <p class="provider-description">Sign in with your Google account for quick access</p>
+      <div class="provider-badge">Recommended</div>
+    </div>
+
+    <div class="provider-card" onclick="selectProvider('Github')">
+      <div class="provider-card-icon">⚫</div>
+      <h3>GitHub</h3>
+      <p class="provider-type">Social Authentication</p>
+      <p class="provider-description">Sign in with your GitHub account</p>
+    </div>
+
+    <!-- IdC Providers -->
+    <div class="provider-card" onclick="selectProvider('BuilderId')">
+      <div class="provider-card-icon">🟠</div>
+      <h3>AWS Builder ID</h3>
+      <p class="provider-type">Identity Center (IdC)</p>
+      <p class="provider-description">Use your AWS Builder ID for authentication</p>
+    </div>
+
+    <div class="provider-card provider-card-enterprise" onclick="showEnterpriseForm()">
+      <div class="provider-card-icon">🔷</div>
+      <h3>Enterprise SSO</h3>
+      <p class="provider-type">Identity Center (IdC)</p>
+      <p class="provider-description">Connect with your organization's SSO</p>
+      <div class="provider-badge provider-badge-enterprise">Requires Start URL</div>
+    </div>
+  </div>
+
+  <!-- Enterprise SSO Form (hidden by default) -->
+  <div class="enterprise-form" id="enterpriseForm" style="display: none;">
+    <div class="form-card">
+      <h3>Enterprise SSO Configuration</h3>
+      <p>Enter your organization's AWS SSO start URL</p>
+
+      <form onsubmit="submitEnterpriseForm(event)">
+        <div class="form-group">
+          <label for="startUrl">Start URL</label>
+          <input
+            type="url"
+            id="startUrl"
+            name="startUrl"
+            placeholder="https://your-org.awsapps.com/start"
+            required
+            pattern="https://.*"
+          >
+          <small class="form-help">Example: https://your-org.awsapps.com/start</small>
+        </div>
+
+        <div class="form-actions">
+          <button type="button" class="btn btn-secondary" onclick="hideEnterpriseForm()">Cancel</button>
+          <button type="submit" class="btn btn-primary">Continue</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Loading Overlay -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="spinner"></div>
+  <p>Initiating OAuth flow...</p>
+</div>
+
+<!-- Authentication Modal -->
+<div id="authModal" class="modal">
+  <div class="modal-backdrop" onclick="closeAuthModal()"></div>
+  <div class="modal-content auth-modal-content">
+    <div class="modal-header">
+      <h3 id="authModalTitle">Authenticate with Provider</h3>
+      <button class="close-btn" onclick="closeAuthModal()" aria-label="Close modal">×</button>
+    </div>
+    <div class="modal-body">
+      <p class="modal-description">Choose how to complete authentication:</p>
+
+      <div class="action-buttons">
+        <button class="btn btn-secondary" onclick="copyAuthUrl()">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>
+          Copy Login Link
+        </button>
+        <button class="btn btn-primary" onclick="openAuthWindow()">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="2" y1="12" x2="22" y2="12"></line>
+            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+          </svg>
+          Open in Browser
+        </button>
+      </div>
+
+      <div class="manual-callback-section">
+        <h4>Manual Callback</h4>
+        <p class="manual-callback-description">After logging in, paste the callback URL here:</p>
+        <div class="form-group">
+          <input
+            type="text"
+            id="callbackUrlInput"
+            placeholder="http://127.0.0.1:xxxxx/oauth/callback?code=...&state=..."
+            aria-label="Callback URL"
+          >
+        </div>
+        <button class="btn btn-primary btn-large" onclick="submitManualCallback()">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+          </svg>
+          Submit Callback
+        </button>
+      </div>
+
+      <div id="modalError" class="result-message error" style="display: none;"></div>
+      <div id="modalSuccess" class="result-message success" style="display: none;"></div>
+    </div>
+  </div>
+</div>
+{{end}}

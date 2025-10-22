@@ -9,6 +9,7 @@ import (
 	"kiro2api/auth"
 	"kiro2api/config"
 	"kiro2api/converter"
+	"kiro2api/dashboard"
 	"kiro2api/logger"
 	"kiro2api/types"
 	"kiro2api/utils"
@@ -19,7 +20,7 @@ import (
 // 移除全局httpClient，使用utils包中的共享客户端
 
 // StartServer 启动HTTP代理服务器
-func StartServer(port string, authToken string, authService *auth.AuthService) {
+func StartServer(port string, authToken string, authService *auth.AuthService, tokensDir string) {
 	// 设置 gin 模式
 	ginMode := os.Getenv("GIN_MODE")
 	if ginMode == "" {
@@ -38,6 +39,13 @@ func StartServer(port string, authToken string, authService *auth.AuthService) {
 	// 只对 /v1 开头的端点进行认证
 	r.Use(PathBasedAuthMiddleware(authToken, []string{"/v1"}))
 
+	// Initialize dashboard handler with the same tokens directory used by auth
+	dashboardHandler, err := dashboard.NewDashboardHandler(tokensDir, authService)
+	if err != nil {
+		logger.Error("Failed to initialize dashboard handler", logger.Err(err))
+		// Continue without dashboard - not critical
+	}
+
 	// 静态资源服务 - 前后端完全分离
 	r.Static("/static", "./static")
 	r.GET("/", func(c *gin.Context) {
@@ -46,6 +54,35 @@ func StartServer(port string, authToken string, authService *auth.AuthService) {
 
 	// API端点 - 纯数据服务
 	r.GET("/api/tokens", handleTokenPoolAPI)
+
+	// Dashboard routes (no authentication required for dashboard itself)
+	if dashboardHandler != nil {
+		// Serve static files from embedded filesystem
+		staticFS := dashboard.GetStaticFS()
+		if staticFS != nil {
+			r.StaticFS("/dashboard/static", http.FS(staticFS))
+		}
+
+		dashboardGroup := r.Group("/dashboard")
+		dashboardGroup.Use(dashboard.SecurityHeaders())
+		{
+			// HTML pages
+			dashboardGroup.GET("", dashboardHandler.Home)
+			dashboardGroup.GET("/select-provider", dashboardHandler.SelectProvider)
+			dashboardGroup.GET("/login", dashboardHandler.ShowLogin)
+			dashboardGroup.GET("/manual-callback", dashboardHandler.ShowManualCallback)
+
+			// OAuth flow endpoints
+			dashboardGroup.GET("/api/login", dashboardHandler.Login)
+			dashboardGroup.GET("/callback", dashboardHandler.Callback)
+			dashboardGroup.POST("/callback", dashboardHandler.ManualCallback)
+
+			// API endpoints
+			dashboardGroup.GET("/tokens", dashboardHandler.ListTokens)
+			dashboardGroup.POST("/tokens/refresh/:id", dashboardHandler.RefreshToken)
+			dashboardGroup.DELETE("/tokens/:id", dashboardHandler.DeleteToken)
+		}
+	}
 
 	// GET /v1/models 端点
 	r.GET("/v1/models", func(c *gin.Context) {
@@ -235,6 +272,18 @@ func StartServer(port string, authToken string, authService *auth.AuthService) {
 	logger.Info("  POST /v1/messages               - Anthropic API代理")
 	logger.Info("  POST /v1/messages/count_tokens  - Token计数接口")
 	logger.Info("  POST /v1/chat/completions       - OpenAI API代理")
+	if dashboardHandler != nil {
+		logger.Info("  GET  /dashboard                      - Dashboard主页")
+		logger.Info("  GET  /dashboard/select-provider      - 选择认证提供商")
+		logger.Info("  GET  /dashboard/login                - OAuth登录页面")
+		logger.Info("  GET  /dashboard/manual-callback      - 手动回调提交页面")
+		logger.Info("  GET  /dashboard/callback             - OAuth回调")
+		logger.Info("  POST /dashboard/callback             - 手动提交回调URL")
+		logger.Info("  GET  /dashboard/tokens               - Token列表API")
+		logger.Info("  POST /dashboard/tokens/refresh/:id   - 刷新Token")
+		logger.Info("  DELETE /dashboard/tokens/:id         - 删除Token")
+		logger.Info("  GET  /dashboard/static/*             - Dashboard静态资源")
+	}
 	logger.Info("按Ctrl+C停止服务器")
 
 	// 创建自定义HTTP服务器以支持长时间请求

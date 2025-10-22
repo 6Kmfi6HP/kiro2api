@@ -1,0 +1,89 @@
+{{template "base" .}}
+
+{{define "title"}}Login - Kiro2API{{end}}
+
+{{define "content"}}
+<div class="login-page">
+  <div class="login-card">
+    <div class="login-header">
+      <div class="provider-icon-large">
+        {{if eq .provider "Google"}}🔵
+        {{else if eq .provider "Github"}}⚫
+        {{else if eq .provider "BuilderId"}}🟠
+        {{else}}🔷{{end}}
+      </div>
+      <h2>Sign in with {{.provider}}</h2>
+      <p class="subtitle">Authenticate to add your account to Kiro2API</p>
+    </div>
+
+    <div class="login-instructions">
+      <h3>How it works:</h3>
+      <ol>
+        <li>Click the "Sign In" button below</li>
+        <li>Complete authentication in your browser</li>
+        <li>You'll be redirected back automatically</li>
+      </ol>
+    </div>
+
+    <div class="login-actions">
+      <button class="btn btn-primary btn-large" id="loginBtn" onclick="initiateLogin()">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M13.8 12H3"/>
+        </svg>
+        Sign In with {{.provider}}
+      </button>
+
+      <a href="/dashboard/select-provider" class="btn btn-secondary btn-large">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M19 12H5M12 19l-7-7 7-7"/>
+        </svg>
+        Choose Different Provider
+      </a>
+    </div>
+
+    <div class="login-divider">
+      <span>or</span>
+    </div>
+
+    <div class="manual-callback-hint">
+      <p>
+        <strong>Remote deployment?</strong>
+        If the automatic callback doesn't work, you can
+        <a href="/dashboard/manual-callback">manually submit the callback URL</a>.
+      </p>
+    </div>
+  </div>
+
+  <!-- OAuth Flow Status -->
+  <div class="oauth-status" id="oauthStatus" style="display: none;">
+    <div class="status-card">
+      <div class="spinner"></div>
+      <h3>Waiting for authentication...</h3>
+      <p id="statusMessage">Please complete the sign-in process in the browser window that just opened.</p>
+
+      <div class="callback-info" id="callbackInfo" style="display: none;">
+        <p class="info-label">Callback URL:</p>
+        <div class="code-block">
+          <code id="callbackUrl"></code>
+          <button class="btn-copy" onclick="copyCallbackUrl()" title="Copy to clipboard">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+            </svg>
+          </button>
+        </div>
+        <p class="info-help">
+          If the browser didn't open automatically, copy this URL and paste it in your browser.
+        </p>
+      </div>
+
+      <button class="btn btn-secondary" onclick="cancelLogin()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const provider = {{.provider}};
+  const loginData = {{.loginData}};
+</script>
+{{end}}

@@ -1,0 +1,87 @@
+{{template "base" .}}
+
+{{define "title"}}Manual Callback - Kiro2API{{end}}
+
+{{define "content"}}
+<div class="manual-callback-page">
+  <div class="callback-card">
+    <div class="callback-header">
+      <div class="icon-large">🔗</div>
+      <h2>Manual Callback Submission</h2>
+      <p class="subtitle">For remote deployments where automatic callbacks don't work</p>
+    </div>
+
+    <div class="callback-instructions">
+      <h3>Instructions:</h3>
+      <ol>
+        <li>Complete the OAuth login flow in your browser</li>
+        <li>After authentication, you'll be redirected to a callback URL</li>
+        <li>Copy the entire URL from your browser's address bar</li>
+        <li>Paste it in the form below and submit</li>
+      </ol>
+
+      <div class="example-box">
+        <p class="example-label">Example callback URL:</p>
+        <code class="example-code">http://127.0.0.1:49153/oauth/callback?code=abc123&state=xyz789</code>
+      </div>
+    </div>
+
+    <form id="callbackForm" onsubmit="submitCallback(event)">
+      <div class="form-group">
+        <label for="callbackUrl">Callback URL</label>
+        <textarea
+          id="callbackUrl"
+          name="callbackUrl"
+          rows="3"
+          placeholder="Paste the callback URL here..."
+          required
+        ></textarea>
+        <small class="form-help">
+          The URL must contain both <code>code</code> and <code>state</code> parameters
+        </small>
+      </div>
+
+      <div class="form-actions">
+        <a href="/dashboard" class="btn btn-secondary">Cancel</a>
+        <button type="submit" class="btn btn-primary" id="submitBtn">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+            <polyline points="22 4 12 14.01 9 11.01"/>
+          </svg>
+          Submit Callback
+        </button>
+      </div>
+    </form>
+
+    <div class="result-message" id="resultMessage" style="display: none;"></div>
+  </div>
+
+  <div class="help-section">
+    <h3>Troubleshooting</h3>
+    <div class="help-grid">
+      <div class="help-item">
+        <h4>Can't find the callback URL?</h4>
+        <p>After logging in, check your browser's address bar. The URL should start with <code>http://127.0.0.1</code> followed by a port number.</p>
+      </div>
+      <div class="help-item">
+        <h4>Connection refused error?</h4>
+        <p>This is normal for remote deployments. Just copy the URL and paste it here - you don't need the page to load.</p>
+      </div>
+      <div class="help-item">
+        <h4>Missing parameters?</h4>
+        <p>Make sure the URL contains both <code>code=</code> and <code>state=</code> parameters. If not, try the login process again.</p>
+      </div>
+      <div class="help-item">
+        <h4>Still having issues?</h4>
+        <p>Check the server logs for detailed error messages, or try a different authentication provider.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Loading Overlay -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="spinner"></div>
+  <p>Processing callback...</p>
+</div>
+{{end}}

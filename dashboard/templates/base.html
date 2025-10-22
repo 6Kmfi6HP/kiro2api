@@ -1,0 +1,53 @@
+{{define "base"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Kiro2API Dashboard - Manage your authentication tokens">
+  <title>{{block "title" .}}Kiro2API Dashboard{{end}}</title>
+  <link rel="stylesheet" href="/dashboard/static/style.css">
+</head>
+<body>
+  <header class="header">
+    <div class="container">
+      <div class="header-content">
+        <div class="logo">
+          <h1>Kiro2API</h1>
+          <span class="badge">Dashboard</span>
+        </div>
+        <nav class="nav" id="nav">
+          <a href="/dashboard" class="nav-link">Home</a>
+          <a href="/dashboard/tokens" class="nav-link">Tokens</a>
+          <a href="https://github.com/yourusername/kiro2api" target="_blank" class="nav-link">Docs</a>
+        </nav>
+        <button class="nav-toggle" id="navToggle" aria-label="Toggle navigation">
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="main">
+    <div class="container">
+      {{block "content" .}}{{end}}
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <p>&copy; 2025 Kiro2API. High-performance AI API proxy service.</p>
+      <p class="footer-links">
+        <a href="https://github.com/yourusername/kiro2api" target="_blank">GitHub</a>
+        <span>|</span>
+        <a href="/dashboard/tokens">API Tokens</a>
+      </p>
+    </div>
+  </footer>
+
+  <script src="/dashboard/static/app.js"></script>
+</body>
+</html>
+{{end}}
