@@ -62,7 +62,7 @@ func NewTokenManager(configs []AuthConfig, tokensDir string) *TokenManager {
 		logger.Int("config_order_count", len(configOrder)),
 		logger.String("tokens_dir", tokensDir))
 
-	return &TokenManager{
+	tm := &TokenManager{
 		cache:        NewSimpleTokenCache(config.TokenCacheTTL),
 		configs:      configs,
 		configOrder:  configOrder,
@@ -72,6 +72,20 @@ func NewTokenManager(configs []AuthConfig, tokensDir string) *TokenManager {
 		stopChan:     make(chan struct{}),
 		persistFunc:  nil, // 默认不持久化，由调用者通过 SetPersistFunc 设置
 	}
+
+	// 立即执行一次初始刷新（确保cache可用）
+	// 这避免了服务启动后前60秒内所有请求失败的问题
+	if len(configs) > 0 {
+		logger.Info("执行初始token刷新")
+		if err := tm.refreshCacheUnlocked(); err != nil {
+			logger.Warn("初始token刷新失败", logger.Err(err))
+		} else {
+			logger.Info("初始token刷新完成",
+				logger.Int("cached_tokens", len(tm.cache.tokens)))
+		}
+	}
+
+	return tm
 }
 
 // SetPersistFunc 设置持久化回调函数（可选，用于自定义持久化逻辑）
@@ -84,6 +98,16 @@ func (tm *TokenManager) SetPersistFunc(fn PersistFunc) {
 func (tm *TokenManager) getBestToken() (types.TokenInfo, error) {
 	tm.mutex.Lock() // 需要写锁因为要更新 LastUsed 和 Available
 	defer tm.mutex.Unlock()
+
+	// 防御性检查：如果cache为空，立即刷新（启动失败的兜底逻辑）
+	if len(tm.cache.tokens) == 0 {
+		logger.Warn("检测到空cache，立即执行紧急刷新")
+		if err := tm.refreshCacheUnlocked(); err != nil {
+			logger.Error("紧急刷新失败", logger.Err(err))
+			return types.TokenInfo{}, fmt.Errorf("token池未初始化且刷新失败: %w", err)
+		}
+		logger.Info("紧急刷新完成", logger.Int("cached_tokens", len(tm.cache.tokens)))
+	}
 
 	// 选择最优token（内部方法，不加锁）
 	bestToken := tm.selectBestTokenUnlocked()
@@ -105,6 +129,16 @@ func (tm *TokenManager) getBestToken() (types.TokenInfo, error) {
 func (tm *TokenManager) GetBestTokenWithUsage() (*types.TokenWithUsage, error) {
 	tm.mutex.Lock() // 需要写锁因为要更新 LastUsed 和 Available
 	defer tm.mutex.Unlock()
+
+	// 防御性检查：如果cache为空，立即刷新（启动失败的兜底逻辑）
+	if len(tm.cache.tokens) == 0 {
+		logger.Warn("检测到空cache，立即执行紧急刷新")
+		if err := tm.refreshCacheUnlocked(); err != nil {
+			logger.Error("紧急刷新失败", logger.Err(err))
+			return nil, fmt.Errorf("token池未初始化且刷新失败: %w", err)
+		}
+		logger.Info("紧急刷新完成", logger.Int("cached_tokens", len(tm.cache.tokens)))
+	}
 
 	// 选择最优token（内部方法，不加锁）
 	bestToken := tm.selectBestTokenUnlocked()
