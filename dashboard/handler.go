@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"net/http"
 	"net/url"
+	"sync"
 	"time"
 
 	"kiro2api/auth"
@@ -24,11 +25,13 @@ var staticFS embed.FS
 
 // DashboardHandler handles dashboard HTTP requests
 type DashboardHandler struct {
-	stateStore    *StateStore
-	tokensDir     string
-	kiroClient    *KiroAuthClient
-	authService   *auth.AuthService
-	templates     *template.Template
+	stateStore       *StateStore
+	tokensDir        string
+	kiroClient       *KiroAuthClient
+	authService      *auth.AuthService
+	templates        *template.Template
+	activeServers    map[string]*CallbackServer
+	activeServersMux sync.Mutex
 }
 
 // NewDashboardHandler creates a new dashboard handler
@@ -50,11 +53,12 @@ func NewDashboardHandler(tokensDir string, authService *auth.AuthService) (*Dash
 	}
 
 	return &DashboardHandler{
-		stateStore:  NewStateStore(),
-		tokensDir:   tokensDir,
-		kiroClient:  NewKiroAuthClient(),
-		authService: authService,
-		templates:   templates,
+		stateStore:    NewStateStore(),
+		tokensDir:     tokensDir,
+		kiroClient:    NewKiroAuthClient(),
+		authService:   authService,
+		templates:     templates,
+		activeServers: make(map[string]*CallbackServer),
 	}, nil
 }
 
@@ -71,12 +75,12 @@ func (h *DashboardHandler) Home(c *gin.Context) {
 
 	// Calculate token status
 	type TokenDisplay struct {
-		ID           string
-		Provider     string
-		AuthMethod   string
-		Status       string
-		ExpiresAt    string
-		CreatedAt    string
+		ID         string
+		Provider   string
+		AuthMethod string
+		Status     string
+		ExpiresAt  string
+		CreatedAt  string
 	}
 
 	displayTokens := make([]TokenDisplay, 0, len(tokens))
@@ -175,6 +179,11 @@ func (h *DashboardHandler) Login(c *gin.Context) {
 		logger.String("redirect_uri", redirectURI),
 		logger.String("provider", provider))
 
+	// Store server instance for cancellation
+	h.activeServersMux.Lock()
+	h.activeServers[state] = callbackServer
+	h.activeServersMux.Unlock()
+
 	// Save state
 	oauthState := &OAuthState{
 		State:         state,
@@ -271,9 +280,48 @@ func (h *DashboardHandler) Login(c *gin.Context) {
 	})
 }
 
+// CancelAuth cancels an in-progress authentication flow
+// POST /dashboard/api/cancel-auth
+func (h *DashboardHandler) CancelAuth(c *gin.Context) {
+	var req struct {
+		State string `json:"state" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		JSONError(c, http.StatusBadRequest, "Invalid request: state is required")
+		return
+	}
+
+	h.activeServersMux.Lock()
+	server, ok := h.activeServers[req.State]
+	if ok {
+		// Remove it from the map immediately under lock
+		delete(h.activeServers, req.State)
+	}
+	h.activeServersMux.Unlock()
+
+	if !ok {
+		logger.Warn("CancelAuth requested for an unknown or already completed state", logger.String("state", req.State))
+		JSONError(c, http.StatusNotFound, "Authentication session not found or already completed.")
+		return
+	}
+
+	// Stop the server outside the lock
+	go server.Stop() // Use a goroutine to not block the response
+
+	logger.Info("User cancelled authentication flow", logger.String("state", req.State))
+	JSONSuccess(c, gin.H{"message": "Authentication process cancelled."})
+}
+
 // waitForCallback waits for OAuth callback and processes token exchange
 func (h *DashboardHandler) waitForCallback(server *CallbackServer, state string) {
-	defer server.Stop()
+	defer func() {
+		server.Stop()
+		h.activeServersMux.Lock()
+		delete(h.activeServers, state)
+		h.activeServersMux.Unlock()
+		logger.Info("Cleaned up callback server", logger.String("state", state))
+	}()
 
 	result, err := server.WaitForCallback()
 	if err != nil {
@@ -489,13 +537,13 @@ func (h *DashboardHandler) ListTokens(c *gin.Context) {
 
 	// Mask sensitive fields
 	type TokenResponse struct {
-		ID           string            `json:"id"`
-		AuthMethod   string            `json:"authMethod"`
-		Provider     string            `json:"provider"`
-		ExpiresAt    time.Time         `json:"expiresAt"`
-		CreatedAt    time.Time         `json:"createdAt"`
-		Status       string            `json:"status"`
-		Metadata     map[string]string `json:"metadata,omitempty"`
+		ID         string            `json:"id"`
+		AuthMethod string            `json:"authMethod"`
+		Provider   string            `json:"provider"`
+		ExpiresAt  time.Time         `json:"expiresAt"`
+		CreatedAt  time.Time         `json:"createdAt"`
+		Status     string            `json:"status"`
+		Metadata   map[string]string `json:"metadata,omitempty"`
 	}
 
 	response := make([]TokenResponse, 0, len(tokens))
@@ -639,6 +687,14 @@ func (h *DashboardHandler) Stop() {
 	if h.stateStore != nil {
 		h.stateStore.Stop()
 	}
+	// Also stop any running callback servers
+	h.activeServersMux.Lock()
+	defer h.activeServersMux.Unlock()
+	for state, server := range h.activeServers {
+		logger.Info("Stopping lingering callback server on shutdown", logger.String("state", state))
+		go server.Stop()
+	}
+	h.activeServers = make(map[string]*CallbackServer) // Clear the map
 }
 
 // GetStaticFS returns the embedded static filesystem
@@ -692,7 +748,7 @@ func (h *DashboardHandler) ShowLogin(c *gin.Context) {
 	if h.templates != nil {
 		if err := h.templates.ExecuteTemplate(c.Writer, "login.html", data); err != nil {
 			logger.Error("Failed to render template", logger.Err(err))
-			JSONSuccess(c, data)
+JSONSuccess(c, data)
 		}
 	} else {
 		JSONSuccess(c, data)

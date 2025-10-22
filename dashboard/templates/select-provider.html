@@ -90,7 +90,10 @@
   <div class="modal-content auth-modal-content">
     <div class="modal-header">
       <h3 id="authModalTitle">Authenticate with Provider</h3>
-      <button class="close-btn" onclick="closeAuthModal()" aria-label="Close modal">×</button>
+      <div>
+        <button class="btn btn-sm btn-secondary" onclick="cancelAuthProcess()">Cancel Listening</button>
+        <button class="close-btn" onclick="closeAuthModal()" aria-label="Close modal">×</button>
+      </div>
     </div>
     <div class="modal-body">
       <p class="modal-description">Choose how to complete authentication:</p>
@@ -109,7 +112,12 @@
             <line x1="2" y1="12" x2="22" y2="12"></line>
             <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
           </svg>
-          Open in Browser
+          Open in Popup
+        </button>
+        <button class="btn btn-secondary btn-icon" onclick="openAuthTab()" title="Open in New Tab">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line>
+            </svg>
         </button>
       </div>
 

@@ -135,6 +135,43 @@ function closeAuthModal() {
   window.currentOAuthState = null;
 }
 
+function cancelAuthProcess() {
+	if (!window.currentOAuthState || !window.currentOAuthState.state) {
+		showModalError('No active authentication process to cancel.');
+		return;
+	}
+
+	const state = window.currentOAuthState.state;
+
+	showLoading();
+
+	fetch('/dashboard/api/cancel-auth', {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json',
+			'Accept': 'application/json',
+		},
+		body: JSON.stringify({ state: state }),
+	})
+	.then(response => response.json())
+	.then(data => {
+		hideLoading();
+		if (data.success) {
+			showModalSuccess('Authentication process cancelled.');
+			setTimeout(() => {
+				closeAuthModal();
+			}, 1000);
+		} else {
+			showModalError(data.error || 'Failed to cancel authentication.');
+		}
+	})
+	.catch(error => {
+		hideLoading();
+		console.error('Cancel auth error:', error);
+		showModalError('Network error. Failed to cancel authentication.');
+	});
+}
+
 function copyAuthUrl() {
   if (!window.currentOAuthState || !window.currentOAuthState.authUrl) {
     showModalError('No authentication URL available');
@@ -170,13 +207,28 @@ function openAuthWindow() {
   window.open(window.currentOAuthState.authUrl, '_blank', 'width=600,height=700');
 
   // Show success message
-  showModalSuccess('Authentication window opened. Complete the sign-in process, then paste the callback URL below or wait for automatic redirect.');
+  showModalSuccess('Authentication window opened. Complete the sign-in process, then paste the callback URL below.');
 
   // Keep modal open for manual callback option
-  // Start polling for automatic callback completion
-  if (window.currentOAuthState.state) {
-    pollForCompletion(window.currentOAuthState.state);
+  // DISABLED: Polling logic is faulty - it checks for ANY tokens instead of the current OAuth state,
+  // causing premature modal closure for users with existing sessions. This prevents manual callback entry.
+  // TODO: Implement state-specific backend endpoint (e.g., GET /dashboard/api/auth-status/:state) to restore automatic completion
+  // if (window.currentOAuthState.state) {
+  //   pollForCompletion(window.currentOAuthState.state);
+  // }
+}
+
+function openAuthTab() {
+  if (!window.currentOAuthState || !window.currentOAuthState.authUrl) {
+    showModalError('No authentication URL available');
+    return;
   }
+
+  // Open authorization URL in a new tab
+  window.open(window.currentOAuthState.authUrl, '_blank');
+
+  // Show success message
+  showModalSuccess('Authentication tab opened. Complete the sign-in process, then paste the callback URL below.');
 }
 
 function submitManualCallback() {

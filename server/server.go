@@ -74,6 +74,7 @@ func StartServer(port string, authToken string, authService *auth.AuthService, t
 
 			// OAuth flow endpoints
 			dashboardGroup.GET("/api/login", dashboardHandler.Login)
+			dashboardGroup.POST("/api/cancel-auth", dashboardHandler.CancelAuth)
 			dashboardGroup.GET("/callback", dashboardHandler.Callback)
 			dashboardGroup.POST("/callback", dashboardHandler.ManualCallback)
 
@@ -279,6 +280,7 @@ func StartServer(port string, authToken string, authService *auth.AuthService, t
 		logger.Info("  GET  /dashboard/manual-callback      - 手动回调提交页面")
 		logger.Info("  GET  /dashboard/callback             - OAuth回调")
 		logger.Info("  POST /dashboard/callback             - 手动提交回调URL")
+		logger.Info("  POST /dashboard/api/cancel-auth      - 取消认证流程")
 		logger.Info("  GET  /dashboard/tokens               - Token列表API")
 		logger.Info("  POST /dashboard/tokens/refresh/:id   - 刷新Token")
 		logger.Info("  DELETE /dashboard/tokens/:id         - 删除Token")

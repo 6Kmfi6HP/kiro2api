@@ -237,6 +237,13 @@ body {
   width: 100%;
 }
 
+.btn-icon {
+    flex: 0 0 auto;
+    width: 44px; /* Match height of other buttons */
+    padding: 0;
+    justify-content: center;
+}
+
 .btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;

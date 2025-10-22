@@ -78,12 +78,12 @@ type ClientRegistrationRequest struct {
 
 // ClientRegistrationResponse represents OAuth client registration response
 type ClientRegistrationResponse struct {
-	ClientID                string `json:"clientId"`
-	ClientSecret            string `json:"clientSecret"`
-	ClientIDIssuedAt        int64  `json:"clientIdIssuedAt"`
-	ClientSecretExpiresAt   int64  `json:"clientSecretExpiresAt"`
-	AuthorizationEndpoint   string `json:"authorizationEndpoint"`
-	TokenEndpoint           string `json:"tokenEndpoint"`
+	ClientID              string `json:"clientId"`
+	ClientSecret          string `json:"clientSecret"`
+	ClientIDIssuedAt      int64  `json:"clientIdIssuedAt"`
+	ClientSecretExpiresAt int64  `json:"clientSecretExpiresAt"`
+	AuthorizationEndpoint string `json:"authorizationEndpoint"`
+	TokenEndpoint         string `json:"tokenEndpoint"`
 }
 
 // RegisterClient registers a new OAuth client with AWS SSO OIDC
@@ -102,7 +102,7 @@ func (c *AWSSSOClient) RegisterClient(issuerURL string) (*ClientRegistrationResp
 	}
 
 	reqBody := ClientRegistrationRequest{
-		ClientName:   "Kiro2API Dashboard",
+		ClientName:   "Kiro IDE",
 		ClientType:   "public",
 		Scopes:       scopes,
 		GrantTypes:   []string{"authorization_code", "refresh_token"},
@@ -122,7 +122,7 @@ func (c *AWSSSOClient) RegisterClient(issuerURL string) (*ClientRegistrationResp
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "Kiro2API/1.0.0")
+	req.Header.Set("User-Agent", "aws-sdk-js/1.0.18 ua/2.1 os/darwin#25.0.0 lang/js md/nodejs#20.16.0 api/codewhispererstreaming#1.0.18 m/E KiroIDE-0.2.13-66c23a8c5d15afabec89ef9954ef52a119f10d369df04d548fc6c1eac694b0d1")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -185,7 +185,7 @@ func (c *AWSSSOClient) CreateToken(params TokenRequest) (*AWSSSOTokenResponse, e
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "Kiro2API/1.0.0")
+	req.Header.Set("User-Agent", "aws-sdk-js/1.0.18 ua/2.1 os/darwin#25.0.0 lang/js md/nodejs#20.16.0 api/codewhispererstreaming#1.0.18 m/E KiroIDE-0.2.13-66c23a8c5d15afabec89ef9954ef52a119f10d369df04d548fc6c1eac694b0d1")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
