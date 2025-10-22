@@ -4,17 +4,26 @@ import (
 	"fmt"
 	"kiro2api/logger"
 	"kiro2api/types"
+	"os"
 )
 
 // AuthService 认证服务（推荐使用依赖注入方式）
 type AuthService struct {
 	tokenManager *TokenManager
 	configs      []AuthConfig
+	tokensDir    string // tokens文件存储目录
 }
 
 // NewAuthService 创建新的认证服务（推荐使用此方法而不是全局函数）
 func NewAuthService() (*AuthService, error) {
 	logger.Info("创建AuthService实例")
+
+	// 读取tokens目录配置
+	tokensDir := os.Getenv("KIRO_TOKENS_DIR")
+	if tokensDir == "" {
+		tokensDir = "tokens" // 默认目录
+	}
+	logger.Info("使用tokens目录", logger.String("tokens_dir", tokensDir))
 
 	// 加载配置
 	configs, err := loadConfigs()
@@ -28,8 +37,8 @@ func NewAuthService() (*AuthService, error) {
 		logger.Warn("请通过dashboard添加token或配置KIRO_AUTH_TOKEN环境变量")
 	}
 
-	// 创建token管理器
-	tokenManager := NewTokenManager(configs)
+	// 创建token管理器（传入tokensDir）
+	tokenManager := NewTokenManager(configs, tokensDir)
 
 	// 仅在有配置时预热token
 	if len(configs) > 0 {
@@ -39,11 +48,16 @@ func NewAuthService() (*AuthService, error) {
 		}
 	}
 
+	// 启动后台刷新
+	tokenManager.StartBackgroundRefresh()
+	logger.Info("后台token刷新已启动")
+
 	logger.Info("AuthService创建完成", logger.Int("config_count", len(configs)))
 
 	return &AuthService{
 		tokenManager: tokenManager,
 		configs:      configs,
+		tokensDir:    tokensDir,
 	}, nil
 }
 
@@ -100,8 +114,16 @@ func (as *AuthService) AddToken(config AuthConfig) error {
 	// 添加到配置列表
 	as.configs = append(as.configs, config)
 
+	// 停止旧的后台刷新
+	if as.tokenManager != nil {
+		as.tokenManager.StopBackgroundRefresh()
+	}
+
 	// 重新创建TokenManager以包含新配置
-	as.tokenManager = NewTokenManager(as.configs)
+	as.tokenManager = NewTokenManager(as.configs, as.tokensDir)
+
+	// 重新启动后台刷新
+	as.tokenManager.StartBackgroundRefresh()
 
 	logger.Info("动态添加token成功",
 		logger.String("auth_type", config.AuthType),
@@ -143,8 +165,16 @@ func (as *AuthService) ReloadTokensFromDirectory(tokensDir string) error {
 		}
 	}
 
+	// 停止旧的后台刷新
+	if as.tokenManager != nil {
+		as.tokenManager.StopBackgroundRefresh()
+	}
+
 	// 重新创建TokenManager
-	as.tokenManager = NewTokenManager(as.configs)
+	as.tokenManager = NewTokenManager(as.configs, as.tokensDir)
+
+	// 重新启动后台刷新
+	as.tokenManager.StartBackgroundRefresh()
 
 	logger.Info("从tokens目录重新加载配置",
 		logger.String("目录", tokensDir),
@@ -153,3 +183,56 @@ func (as *AuthService) ReloadTokensFromDirectory(tokensDir string) error {
 
 	return nil
 }
+
+// Shutdown 优雅关闭认证服务
+// 停止后台刷新任务
+func (as *AuthService) Shutdown() {
+	logger.Info("正在关闭AuthService...")
+
+	if as.tokenManager != nil {
+		as.tokenManager.StopBackgroundRefresh()
+		logger.Info("后台token刷新已停止")
+	}
+
+	logger.Info("AuthService已关闭")
+}
+
+// HealthStatus token池健康状态
+type HealthStatus struct {
+	Status          string `json:"status"`           // "healthy" 或 "degraded" 或 "unhealthy"
+	TotalTokens     int    `json:"total_tokens"`     // 总token数
+	AvailableTokens int    `json:"available_tokens"` // 可用token数
+	LastRefreshTime string `json:"last_refresh_time"`// 最后刷新时间
+}
+
+// GetHealthStatus 获取token池健康状态
+func (as *AuthService) GetHealthStatus() HealthStatus {
+	if as.tokenManager == nil {
+		return HealthStatus{
+			Status:          "unhealthy",
+			TotalTokens:     0,
+			AvailableTokens: 0,
+			LastRefreshTime: "never",
+		}
+	}
+
+	totalTokens, availableTokens, lastRefresh := as.tokenManager.GetHealthInfo()
+
+	status := "healthy"
+	if availableTokens == 0 {
+		status = "unhealthy"
+	} else if availableTokens < totalTokens/2 {
+		status = "degraded"
+	}
+
+	return HealthStatus{
+		Status:          status,
+		TotalTokens:     totalTokens,
+		AvailableTokens: availableTokens,
+		LastRefreshTime: lastRefresh.Format("2006-01-02 15:04:05"),
+	}
+}
+
+// TODO: Token持久化功能将在后续版本中重新实现
+// 由于循环依赖问题(auth -> dashboard -> auth)，暂时移除
+// 计划：创建独立的storage包处理持久化，或在server层处理

@@ -55,6 +55,9 @@ func StartServer(port string, authToken string, authService *auth.AuthService, t
 	// API端点 - 纯数据服务
 	r.GET("/api/tokens", handleTokenPoolAPI)
 
+	// 健康检查端点（不需要认证，用于监控系统）
+	r.GET("/health", HandleHealth(authService))
+
 	// Dashboard routes (no authentication required for dashboard itself)
 	if dashboardHandler != nil {
 		// Serve static files from embedded filesystem

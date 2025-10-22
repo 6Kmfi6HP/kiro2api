@@ -9,15 +9,23 @@ import (
 	"time"
 )
 
-// TokenManager 简化的token管理器
+// PersistFunc 持久化函数类型
+// 用于将token持久化到存储（避免循环依赖）
+type PersistFunc func(token types.TokenInfo, authConfig AuthConfig, configIndex int, tokensDir string) error
+
+// TokenManager 简化的token管理器（支持后台刷新）
 type TokenManager struct {
-	cache        *SimpleTokenCache
-	configs      []AuthConfig
-	mutex        sync.RWMutex
-	lastRefresh  time.Time
-	configOrder  []string        // 配置顺序
-	currentIndex int             // 当前使用的token索引
-	exhausted    map[string]bool // 已耗尽的token记录
+	cache         *SimpleTokenCache
+	configs       []AuthConfig
+	mutex         sync.RWMutex    // 使用读写锁优化并发性能
+	lastRefresh   time.Time
+	configOrder   []string        // 配置顺序
+	currentIndex  int             // 当前使用的token索引
+	exhausted     map[string]bool // 已耗尽的token记录
+	tokensDir     string          // tokens文件存储目录
+	refreshTicker *time.Ticker    // 后台刷新定时器
+	stopChan      chan struct{}   // 停止信号
+	persistFunc   PersistFunc     // 持久化回调函数（可选）
 }
 
 // SimpleTokenCache 简化的token缓存（纯数据结构，无锁）
@@ -45,13 +53,14 @@ func NewSimpleTokenCache(ttl time.Duration) *SimpleTokenCache {
 }
 
 // NewTokenManager 创建新的token管理器
-func NewTokenManager(configs []AuthConfig) *TokenManager {
+func NewTokenManager(configs []AuthConfig, tokensDir string) *TokenManager {
 	// 生成配置顺序
 	configOrder := generateConfigOrder(configs)
 
-	logger.Info("TokenManager初始化（顺序选择策略）",
+	logger.Info("TokenManager初始化（顺序选择策略 + 后台刷新）",
 		logger.Int("config_count", len(configs)),
-		logger.Int("config_order_count", len(configOrder)))
+		logger.Int("config_order_count", len(configOrder)),
+		logger.String("tokens_dir", tokensDir))
 
 	return &TokenManager{
 		cache:        NewSimpleTokenCache(config.TokenCacheTTL),
@@ -59,21 +68,22 @@ func NewTokenManager(configs []AuthConfig) *TokenManager {
 		configOrder:  configOrder,
 		currentIndex: 0,
 		exhausted:    make(map[string]bool),
+		tokensDir:    tokensDir,
+		stopChan:     make(chan struct{}),
+		persistFunc:  nil, // 默认不持久化，由调用者通过 SetPersistFunc 设置
 	}
 }
 
-// getBestToken 获取最优可用token
-// 统一锁管理：所有操作在单一锁保护下完成，避免多次加锁/解锁
-func (tm *TokenManager) getBestToken() (types.TokenInfo, error) {
-	tm.mutex.Lock()
-	defer tm.mutex.Unlock()
+// SetPersistFunc 设置持久化回调函数（可选，用于自定义持久化逻辑）
+func (tm *TokenManager) SetPersistFunc(fn PersistFunc) {
+	tm.persistFunc = fn
+}
 
-	// 检查是否需要刷新缓存（在锁内）
-	if time.Since(tm.lastRefresh) > config.TokenCacheTTL {
-		if err := tm.refreshCacheUnlocked(); err != nil {
-			logger.Warn("刷新token缓存失败", logger.Err(err))
-		}
-	}
+// getBestToken 获取最优可用token
+// 使用读锁优化并发性能（刷新由后台任务负责）
+func (tm *TokenManager) getBestToken() (types.TokenInfo, error) {
+	tm.mutex.Lock() // 需要写锁因为要更新 LastUsed 和 Available
+	defer tm.mutex.Unlock()
 
 	// 选择最优token（内部方法，不加锁）
 	bestToken := tm.selectBestTokenUnlocked()
@@ -91,17 +101,10 @@ func (tm *TokenManager) getBestToken() (types.TokenInfo, error) {
 }
 
 // GetBestTokenWithUsage 获取最优可用token（包含使用信息）
-// 统一锁管理：所有操作在单一锁保护下完成
+// 使用读锁优化并发性能（刷新由后台任务负责）
 func (tm *TokenManager) GetBestTokenWithUsage() (*types.TokenWithUsage, error) {
-	tm.mutex.Lock()
+	tm.mutex.Lock() // 需要写锁因为要更新 LastUsed 和 Available
 	defer tm.mutex.Unlock()
-
-	// 检查是否需要刷新缓存（在锁内）
-	if time.Since(tm.lastRefresh) > config.TokenCacheTTL {
-		if err := tm.refreshCacheUnlocked(); err != nil {
-			logger.Warn("刷新token缓存失败", logger.Err(err))
-		}
-	}
 
 	// 选择最优token（内部方法，不加锁）
 	bestToken := tm.selectBestTokenUnlocked()
@@ -297,4 +300,218 @@ func generateConfigOrder(configs []AuthConfig) []string {
 		logger.Any("order", order))
 
 	return order
+}
+
+// ========== 后台刷新功能 ==========
+
+// StartBackgroundRefresh 启动后台刷新goroutine
+func (tm *TokenManager) StartBackgroundRefresh() {
+	tm.refreshTicker = time.NewTicker(config.BackgroundRefreshInterval)
+
+	go tm.backgroundRefreshLoop()
+
+	logger.Info("后台token刷新已启动",
+		logger.Duration("check_interval", config.BackgroundRefreshInterval),
+		logger.Duration("refresh_window", config.TokenRefreshWindow))
+}
+
+// StopBackgroundRefresh 停止后台刷新
+func (tm *TokenManager) StopBackgroundRefresh() {
+	if tm.refreshTicker != nil {
+		tm.refreshTicker.Stop()
+	}
+
+	// 发送停止信号
+	select {
+	case tm.stopChan <- struct{}{}:
+	default:
+		// stopChan 可能已关闭或已满，忽略
+	}
+
+	logger.Info("后台token刷新停止信号已发送")
+}
+
+// backgroundRefreshLoop 后台刷新循环
+func (tm *TokenManager) backgroundRefreshLoop() {
+	logger.Debug("后台刷新goroutine已启动")
+
+	for {
+		select {
+		case <-tm.refreshTicker.C:
+			logger.Debug("执行定时token检查")
+			tm.checkAndRefreshTokens()
+
+		case <-tm.stopChan:
+			logger.Info("后台刷新goroutine已停止")
+			return
+		}
+	}
+}
+
+// checkAndRefreshTokens 检查并刷新需要刷新的tokens
+func (tm *TokenManager) checkAndRefreshTokens() {
+	// 第一步：找出需要刷新的token（使用读锁）
+	tm.mutex.RLock()
+	tokensToRefresh := tm.findTokensNeedingRefreshUnlocked()
+	tm.mutex.RUnlock()
+
+	if len(tokensToRefresh) == 0 {
+		logger.Debug("没有token需要刷新")
+		return
+	}
+
+	logger.Info("发现需要刷新的token", logger.Int("count", len(tokensToRefresh)))
+
+	// 第二步：刷新这些token（不持有锁，避免阻塞）
+	for _, configWithIndex := range tokensToRefresh {
+		tm.refreshSingleTokenWithRetry(configWithIndex.config, configWithIndex.index)
+	}
+}
+
+// configWithIndex 配置和索引的包装
+type configWithIndex struct {
+	config AuthConfig
+	index  int
+}
+
+// findTokensNeedingRefreshUnlocked 找出需要刷新的tokens
+// 内部方法：调用者必须持有 tm.mutex (读锁即可)
+func (tm *TokenManager) findTokensNeedingRefreshUnlocked() []configWithIndex {
+	var tokensToRefresh []configWithIndex
+
+	for i, cfg := range tm.configs {
+		if cfg.Disabled {
+			continue
+		}
+
+		cacheKey := fmt.Sprintf(config.TokenCacheKeyFormat, i)
+		cached, exists := tm.cache.tokens[cacheKey]
+
+		// 如果token不存在或需要刷新
+		if !exists || tm.shouldRefreshToken(cached) {
+			tokensToRefresh = append(tokensToRefresh, configWithIndex{
+				config: cfg,
+				index:  i,
+			})
+		}
+	}
+
+	return tokensToRefresh
+}
+
+// shouldRefreshToken 判断token是否需要刷新
+// 提前10分钟刷新，而不是等到过期
+func (tm *TokenManager) shouldRefreshToken(cached *CachedToken) bool {
+	if cached == nil {
+		return true
+	}
+
+	// 检查token是否在刷新窗口内（提前10分钟）
+	timeUntilExpiry := time.Until(cached.Token.ExpiresAt)
+	return timeUntilExpiry <= config.TokenRefreshWindow
+}
+
+// refreshSingleTokenWithRetry 刷新单个token（带指数退避重试）
+func (tm *TokenManager) refreshSingleTokenWithRetry(authConfig AuthConfig, configIndex int) {
+	var lastErr error
+
+	for attempt := 0; attempt <= config.MaxRefreshRetries; attempt++ {
+		// 执行刷新
+		token, err := tm.refreshSingleToken(authConfig)
+		if err == nil {
+			// 成功：更新缓存并持久化
+			tm.updateCacheAndPersist(authConfig, token, configIndex)
+			logger.Info("token刷新成功",
+				logger.Int("config_index", configIndex),
+				logger.String("auth_type", authConfig.AuthType),
+				logger.Int("attempt", attempt+1))
+			return
+		}
+
+		lastErr = err
+		logger.Warn("token刷新失败",
+			logger.Int("config_index", configIndex),
+			logger.String("auth_type", authConfig.AuthType),
+			logger.Int("attempt", attempt+1),
+			logger.Err(err))
+
+		// 如果还有重试机会，等待后重试
+		if attempt < config.MaxRefreshRetries {
+			delay := config.RefreshRetryBaseDelay * time.Duration(1<<uint(attempt))
+			logger.Debug("等待后重试", logger.Duration("delay", delay))
+			time.Sleep(delay)
+		}
+	}
+
+	logger.Error("token刷新失败（已达最大重试次数）",
+		logger.Int("config_index", configIndex),
+		logger.String("auth_type", authConfig.AuthType),
+		logger.Int("max_retries", config.MaxRefreshRetries),
+		logger.Err(lastErr))
+}
+
+// updateCacheAndPersist 更新缓存并持久化到文件
+func (tm *TokenManager) updateCacheAndPersist(authConfig AuthConfig, token types.TokenInfo, configIndex int) {
+	// 检查使用限制
+	var usageInfo *types.UsageLimits
+	var available float64
+
+	checker := NewUsageLimitsChecker()
+	if usage, checkErr := checker.CheckUsageLimits(token); checkErr == nil {
+		usageInfo = usage
+		available = CalculateAvailableCount(usage)
+	} else {
+		logger.Warn("检查使用限制失败", logger.Err(checkErr))
+	}
+
+	// 更新缓存（需要写锁）
+	tm.mutex.Lock()
+	cacheKey := fmt.Sprintf(config.TokenCacheKeyFormat, configIndex)
+	tm.cache.tokens[cacheKey] = &CachedToken{
+		Token:     token,
+		UsageInfo: usageInfo,
+		CachedAt:  time.Now(),
+		Available: available,
+	}
+	tm.lastRefresh = time.Now()
+	// 清除exhausted标记
+	delete(tm.exhausted, cacheKey)
+	tm.mutex.Unlock()
+
+	logger.Debug("token缓存已更新",
+		logger.String("cache_key", cacheKey),
+		logger.Float64("available", available))
+
+	// 持久化到文件（不需要锁）
+	if err := tm.persistTokenToFile(token, authConfig, configIndex); err != nil {
+		logger.Warn("token持久化失败", logger.Err(err))
+	}
+}
+
+// persistTokenToFile 持久化token到文件
+func (tm *TokenManager) persistTokenToFile(token types.TokenInfo, authConfig AuthConfig, configIndex int) error {
+	// 如果设置了持久化回调函数，则调用它
+	if tm.persistFunc != nil {
+		return tm.persistFunc(token, authConfig, configIndex, tm.tokensDir)
+	}
+	// 如果没有设置，跳过持久化（仅内存）
+	return nil
+}
+
+// GetHealthInfo 获取健康信息
+// 返回：总token数，可用token数，最后刷新时间
+func (tm *TokenManager) GetHealthInfo() (int, int, time.Time) {
+	tm.mutex.RLock()
+	defer tm.mutex.RUnlock()
+
+	totalTokens := len(tm.configs)
+	availableTokens := 0
+
+	for _, cached := range tm.cache.tokens {
+		if cached.IsUsable() {
+			availableTokens++
+		}
+	}
+
+	return totalTokens, availableTokens, tm.lastRefresh
 }
